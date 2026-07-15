@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>会计凭证生成工具</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f0f2f5; color: #333; line-height: 1.6; }
+.container { max-width: 1400px; margin: 0 auto; padding: 24px 16px; }
+.header { background: linear-gradient(135deg, #1a237e, #283593); color: #fff; padding: 28px 32px; border-radius: 12px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(26,35,126,0.25); }
+.header h1 { font-size: 26px; font-weight: 700; margin-bottom: 4px; }
+.header p { opacity: 0.85; font-size: 14px; }
+.steps { display: flex; gap: 8px; margin-bottom: 24px; }
+.step { flex: 1; padding: 14px 16px; background: #fff; border-radius: 8px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); opacity: 0.5; transition: all .3s; }
+.step.active { opacity: 1; border-left: 3px solid #3949ab; }
+.step.done { opacity: 1; background: #e8f5e9; border-left: 3px solid #2e7d32; }
+.step-num { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; background: #e0e0e0; color: #999; flex-shrink: 0; }
+.step.active .step-num { background: #3949ab; color: #fff; }
+.step.done .step-num { background: #2e7d32; color: #fff; }
+.step-label { font-size: 14px; font-weight: 500; }
+.step-desc { font-size: 12px; color: #666; }
+.card { background: #fff; border-radius: 10px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); }
+.card-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #1a237e; border-left: 4px solid #3949ab; padding-left: 12px; display: flex; align-items: center; gap: 8px; }
+.upload-area { border: 2px dashed #c5cae9; border-radius: 10px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all .2s; background: #f5f5ff; position: relative; }
+.upload-area:hover, .upload-area.dragover { border-color: #3949ab; background: #e8eaf6; }
+.upload-area input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.info-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.info-item { flex: 1; min-width: 140px; }
+.info-item label { display: block; font-size: 13px; color: #666; margin-bottom: 4px; }
+.info-item input, .info-item select { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; outline: none; transition: border .2s; background: #fff; }
+.info-item input:focus, .info-item select:focus { border-color: #3949ab; box-shadow: 0 0 0 3px rgba(57,73,171,0.12); }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 20px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; border: none; transition: all .2s; }
+.btn-primary { background: #3949ab; color: #fff; } .btn-primary:hover { background: #283593; }
+.btn-secondary { background: #e8eaf6; color: #3949ab; } .btn-secondary:hover { background: #c5cae9; }
+.btn-success { background: #2e7d32; color: #fff; } .btn-success:hover { background: #1b5e20; }
+.btn-warning { background: #ef6c00; color: #fff; } .btn-warning:hover { background: #e65100; }
+.btn-danger { background: #c62828; color: #fff; } .btn-danger:hover { background: #b71c1c; }
+.btn-sm { padding: 4px 12px; font-size: 12px; border-radius: 4px; }
+.btn-xs { padding: 2px 8px; font-size: 11px; border-radius: 3px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sheet-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.sheet-card { border: 2px solid #e0e0e0; border-radius: 8px; padding: 16px; transition: all .2s; }
+.sheet-card.sheet-salary { border-color: #3949ab; background: #f5f5ff; }
+.sheet-card.sheet-basedata { border-color: #2e7d32; background: #e8f5e9; }
+.sheet-card.sheet-unknown { border-color: #ef6c00; background: #fff3e0; }
+.sheet-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+.sheet-card-name { font-size: 16px; font-weight: 700; }
+.sheet-card-meta { font-size: 12px; color: #666; margin-bottom: 8px; }
+.sheet-card-detail { font-size: 12px; color: #777; line-height: 1.8; }
+.role-btn { padding: 3px 10px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 11px; cursor: pointer; background: #fff; transition: all .15s; }
+.role-btn.active { color: #fff; border-color: transparent; }
+.role-btn.active.role-salary { background: #3949ab; }
+.role-btn.active.role-basedata { background: #2e7d32; }
+.role-btn.active.role-ignore { background: #999; }
+.mapping-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mapping-table th { background: #fafafa; padding: 8px 12px; text-align: left; font-weight: 600; color: #555; border-bottom: 2px solid #e0e0e0; white-space: nowrap; }
+.mapping-table td { padding: 6px 12px; border-bottom: 1px solid #f0f0f0; }
+.mapping-table select { width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 13px; background: #fff; }
+.mapping-table .col-matched { background: #e8f5e9; }
+.mapping-table .col-unmatched { background: #fff3e0; }
+.check-ok { color: #2e7d32; font-weight: 600; }
+.check-warn { color: #e65100; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 20px; }
+.stat-card { background: #f5f5ff; border-radius: 8px; padding: 16px; text-align: center; }
+.stat-card .value { font-size: 28px; font-weight: 700; color: #1a237e; }
+.stat-card .label { font-size: 13px; color: #666; margin-top: 4px; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0; align-items: center; }
+.toolbar-spacer { flex: 1; }
+.voucher-grid { display: grid; gap: 12px; }
+.voucher-group { border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; transition: box-shadow .2s; }
+.voucher-group:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+.voucher-group.balanced { border-left: 3px solid #2e7d32; }
+.voucher-group.unbalanced { border-left: 3px solid #c62828; }
+.voucher-header { background: #f5f5ff; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+.voucher-header:hover { background: #e8eaf6; }
+.voucher-header h4 { font-size: 15px; font-weight: 600; color: #1a237e; display: flex; align-items: center; gap: 8px; }
+.voucher-header .meta { font-size: 13px; color: #666; }
+.voucher-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.voucher-table th { background: #fafafa; padding: 8px 12px; text-align: left; font-weight: 600; color: #555; border-bottom: 2px solid #e0e0e0; white-space: nowrap; }
+.voucher-table td { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+.direction-debit { color: #c62828; font-weight: 600; }
+.direction-credit { color: #1565c0; font-weight: 600; }
+.amount { text-align: right; font-family: "SF Mono", "Consolas", monospace; font-weight: 600; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.badge-ok { background: #e8f5e9; color: #2e7d32; }
+.badge-warn { background: #ffebee; color: #c62828; }
+.voucher-total { background: #f5f5ff; padding: 8px 16px; font-size: 13px; color: #1a237e; font-weight: 600; display: flex; justify-content: space-between; }
+.error-msg { padding: 10px 14px; background: #ffebee; color: #c62828; border-radius: 6px; font-size: 14px; margin: 12px 0; display: none; }
+.error-msg.show { display: block; }
+.toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; color: #fff; font-size: 14px; z-index: 2000; animation: slideUp .3s ease; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+.toast-success { background: #2e7d32; } .toast-error { background: #c62828; } .toast-info { background: #283593; }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.file-info { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 14px; background: #e8f5e9; border-radius: 6px; font-size: 14px; }
+.file-info .name { color: #2e7d32; font-weight: 500; }
+.empty-state { text-align: center; padding: 40px; color: #999; font-size: 15px; }
+.loading-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 1000; justify-content: center; align-items: center; flex-direction: column; }
+.loading-overlay.active { display: flex; }
+.loading-card { background: #fff; border-radius: 12px; padding: 40px 48px; text-align: center; box-shadow: 0 8px 40px rgba(0,0,0,0.15); min-width: 320px; }
+.spinner { width: 44px; height: 44px; border: 3px solid #e0e0e0; border-top-color: #3949ab; border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>会计凭证生成工具</h1>
+    <p>上传 Excel 文件 &rarr; 自动识别 &rarr; 一键生成凭证 | 纯浏览器运行，数据不上传服务器</p>
+  </div>
+  <div class="steps">
+    <div class="step active" id="step1"><div class="step-num">1</div><div><div class="step-label">上传文件</div><div class="step-desc">上传含工资表和基础数据的Excel</div></div></div>
+    <div class="step" id="step2"><div class="step-num">2</div><div><div class="step-label">生成凭证</div><div class="step-desc">确认Sheet角色，一键生成</div></div></div>
+    <div class="step" id="step3"><div class="step-num">3</div><div><div class="step-label">预览与导出</div><div class="step-desc">查看凭证，下载Excel</div></div></div>
+  </div>
+  <div class="card" id="step1Card">
+    <div class="card-title">第一步：上传文件 &amp; 设置参数</div>
+    <div class="info-row">
+      <div class="info-item"><label>会计期间</label><input type="month" id="period" /></div>
+      <div class="info-item"><label>工资所属月份</label><input type="month" id="salaryMonth" /></div>
+      <div class="info-item"><label>凭证类型</label><select id="voucherType"><option value="accrual">计提工资 (转字)</option><option value="payment">发放工资 (银字)</option><option value="carry_forward">结转工资 (转字)</option><option value="withholding">代扣费用 (转字)</option></select></div>
+      <div class="info-item"><label>凭证字</label><select id="voucherWord"><option value="转">转</option><option value="银">银</option><option value="记">记</option></select></div>
+      <div class="info-item"><label>凭证日期</label><input type="date" id="periodDate" /></div>
+    </div>
+    <div class="upload-area" id="uploadArea">
+      <div style="font-size:48px;color:#5c6bc0;margin-bottom:12px;">&#128196;</div>
+      <div style="color:#666;font-size:15px;">点击或拖拽上传 Excel 文件 (.xlsx / .xls)</div>
+      <div style="color:#999;font-size:13px;margin-top:6px;">支持多Sheet文件，自动识别工资表和基础数据表</div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls" />
+    </div>
+    <div class="file-info" id="fileInfo" style="display:none;">
+      <span class="name" id="fileName"></span><span id="fileSize"></span>
+      <button class="btn btn-secondary btn-sm" onclick="resetAll()" style="margin-left:auto;">重新选择</button>
+    </div>
+    <div class="error-msg" id="errorMsg"></div>
+    <div class="toolbar">
+      <button class="btn btn-primary" id="detectBtn" disabled onclick="detectAndGenerate()">识别文件并生成凭证</button>
+    </div>
+  </div>
+  <div class="card" id="step2Card" style="display:none;">
+    <div class="card-title">第二步：确认 Sheet 角色</div>
+    <div id="sheetCards"></div>
+    <div class="error-msg" id="mapError"></div>
+    <div style="font-size:12px; color:#999; margin:8px 0;">提示: 双击 Sheet 卡片可切换其角色（工资表 / 基础数据表 / 忽略）</div>
+    <div class="toolbar">
+      <button class="btn btn-primary" onclick="submitGenerate()">生成凭证</button>
+      <button class="btn btn-secondary" onclick="resetAll()">返回重选文件</button>
+    </div>
+  </div>
+  <div id="resultArea" style="display:none;">
+    <div class="stats-grid" id="statsGrid"></div>
+    <div class="card">
+      <div class="card-title">生成凭证列表 <span class="badge badge-ok" id="balanceBadge" style="margin-left:8px;"></span></div>
+      <div class="toolbar">
+        <input type="text" id="searchInput" placeholder="搜索项目/凭证..." style="padding:6px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;width:200px;" oninput="filterVouchers()">
+        <button class="btn btn-sm btn-secondary" onclick="expandAll()">全部展开</button>
+        <button class="btn btn-sm btn-secondary" onclick="collapseAll()">全部收起</button>
+        <div class="toolbar-spacer"></div>
+        <button class="btn btn-success" onclick="exportExcel()">下载凭证Excel</button>
+        <button class="btn btn-success" onclick="exportJSON()">导出JSON</button>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+        <span style="font-size:13px; color:#666;">快速过滤:</span>
+        <button class="btn btn-sm btn-secondary" onclick="setFilter('all')">全部</button>
+        <button class="btn btn-sm btn-secondary" onclick="setFilter('rd')">仅研发</button>
+        <button class="btn btn-sm btn-secondary" onclick="setFilter('non-rd')">仅非研发</button>
+        <button class="btn btn-sm btn-secondary" onclick="setFilter('unbalanced')">借贷不平</button>
+      </div>
+      <div style="margin-bottom:6px; font-size:12px; color:#999;" id="filterInfo"></div>
+      <div class="voucher-grid" id="voucherList"></div>
+    </div>
+  </div>
+</div>
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-card"><div class="spinner"></div><div class="loading-text" id="loadingText">处理中...</div></div>
+</div>
+<div id="toastContainer"></div>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script>
+// ===================== 常量 =====================
+const HQ_KEYWORDS = ["十八", "机关", "本部", "分公司"];
+const SALARY_COMPONENT_NAMES = ["岗位工资","岗位工资2","工龄工资","交通补贴","通讯补贴","职称津贴","证书津贴","餐费补贴","浮动绩效","驻外津贴","奖金","加班费","实发金额"];
+const BASE_DATA_HEADER_INDICATORS = ["项目简称","一级科目","明细科目","科目代码","课题代码","课题名称","投入产出科目","科目名称"];
+const TARGET_KEYS = [
+  {key:"project_name",label:"项目名称",aliases:["项目","项目名称","工程名称","工程项目"]},
+  {key:"project_code",label:"项目代码",aliases:["项目代码","工程代码"]},
+  {key:"rd_name",label:"研发课题名称",aliases:["研发课题","研发项目","课题名称","研发项目名称"]},
+  {key:"rd_code",label:"研发课题代码",aliases:["研发课题代码","研发项目代码","课题代码"]},
+  {key:"dept_code",label:"部门代码",aliases:["部门代码","部门编号"]},
+  {key:"dept_name",label:"部门名称",aliases:["部门","部门名称"]},
+  {key:"employee_name",label:"员工姓名",aliases:["姓名","员工姓名","职员姓名"]},
+  {key:"employee_code",label:"员工编号",aliases:["工号","员工编号","职员代码"]},
+];
+const SUBJECT_CODES = {rd_expense:{code:"50080101",name:"研发支出-费用化支出"},capital_expense:{code:"50020201",name:"在建工程"},salary_base:{code:"22110101",name:"应付职工薪酬-岗位工资"},salary_other:{code:"22110102",name:"应付职工薪酬-补贴津贴"},bank_account:{code:"100202",name:"银行存款"},contract_cost:{code:"112402",name:"工资"}};
+const CF_SALARY_COMPONENTS = ["工龄工资","交通补贴","通讯补贴","职称津贴","证书津贴","餐费补贴","浮动绩效","驻外津贴"];
+const WH_DEDUCTION_COMPONENTS = ["养老保险","失业保险","医疗保险","公积金","个人所得税"];
+const WH_COMPONENT_TO_CODE = {"养老保险":"22410501","失业保险":"22410502","医疗保险":"22410505","公积金":"224106","个人所得税":"222111"};
+const WH_COMPONENT_TO_CUSTOMER = {"养老保险":"KS0000000000073877","失业保险":"KS0000000000073877","医疗保险":"KS0000000000073877","公积金":"KS0000000000011321","个人所得税":""};
+const WH_COMPONENT_LABEL = {"养老保险":"养老保险个人部分","失业保险":"失业保险个人部分","医疗保险":"医疗保险个人部分","公积金":"公积金个人部分","个人所得税":"个人所得税个人部分"};
+const TEMPLATE_HEADERS = ["序号","科目代码","科目名称","币别代码","年度","会计期","凭证日期","凭证类别","凭证摘要","借方金额","贷方金额","借方原币","贷方原币","汇率","贷方数量","借方数量","单价","附件张数","结算号","结算方式","结算日期","单据编号","业务号","业务日期","到期日","项目代码","项目名称(导入时删掉)","对方项目代码","客商代码","客商代码(导入时删掉)","研发项目代码","研发项目(导入时删掉)","现金流量项目代码","银行代码","账户代码","部门代码","职员代码","职员代码(导入时删掉)","物料代码","往来明细代码","税率代码","资金分类代码","自定义项代码"];
+
+// ===================== 全局状态 =====================
+let selectedFile = null, detectResult = null, genResult = null;
+let baseDataLookup = {}, counterpartyLookup = {}, topicNameToCode = {}, salaryItemToCode = {}, expenseTypeToCode = {};
+let salarySheetName = null, basedataSheetName = null, sheetRoles = {};
+let currentFilter = 'all';
+
+// ===================== UI 辅助 =====================
+function $id(id) { return document.getElementById(id); }
+function setStep(n) { [1,2,3].forEach(i=>{const e=$id("step"+i);e.classList.remove("active","done");if(i<n)e.classList.add("done");if(i===n)e.classList.add("active");}); }
+function showErr(msg) { const e=$id("errorMsg");e.innerHTML=msg;e.classList.add("show"); }
+function showErr2(msg) { const e=$id("mapError");e.innerHTML=msg;e.classList.add("show"); }
+function showLoading(txt) { $id("loadingText").textContent=txt;$id("loadingOverlay").classList.add("active"); }
+function hideLoading() { $id("loadingOverlay").classList.remove("active"); }
+function hideResult() { $id("resultArea").style.display="none"; }
+function toast(msg,type) { const t=document.createElement("div");t.className="toast toast-"+(type||"info");t.textContent=msg;$id("toastContainer").appendChild(t);setTimeout(()=>t.remove(),3000); }
+function isDebitCode(code) { return code && !code.startsWith("2211"); }
+
+// ===================== 文件处理 =====================
+$id("fileInput").addEventListener("change", function(e) {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (!f.name.match(/\.xlsx?$/i)) { showErr("请上传 .xlsx 或 .xls 格式文件"); return; }
+  selectedFile = f;
+  $id("fileName").textContent = f.name;
+  $id("fileSize").textContent = `(${(f.size/1024/1024).toFixed(2)} MB)`;
+  $id("fileInfo").style.display = "flex";
+  $id("uploadArea").style.display = "none";
+  $id("detectBtn").disabled = false;
+  $id("errorMsg").classList.remove("show");
+  hideStep2(); hideResult(); detectResult=null; genResult=null;
+});
+const ua = $id("uploadArea");
+ua.addEventListener("dragover", e => { e.preventDefault(); ua.classList.add("dragover"); });
+ua.addEventListener("dragleave", () => ua.classList.remove("dragover"));
+ua.addEventListener("drop", e => { e.preventDefault(); ua.classList.remove("dragover"); const f=e.dataTransfer.files[0];if(f){$id("fileInput").files=e.dataTransfer.files;$id("fileInput").dispatchEvent(new Event("change"));} });
+
+function resetAll() {
+  selectedFile=null;detectResult=null;genResult=null;salarySheetName=null;basedataSheetName=null;sheetRoles={};
+  baseDataLookup={};counterpartyLookup={};topicNameToCode={};salaryItemToCode={};expenseTypeToCode={};
+  $id("fileInfo").style.display="none";$id("uploadArea").style.display="block";$id("fileInput").value="";
+  $id("detectBtn").disabled=true;hideStep2();hideResult();$id("errorMsg").classList.remove("show");setStep(1);
+}
+function hideStep2() { $id("step2Card").style.display="none"; }
+
+// ===================== 拼音排序 =====================
+// 简化版拼音首字母映射(覆盖常见姓/地名字)
+const PINYIN_FIRST = {};
+(function(){
+  const map = "啊阿a|八把b|擦才c|大代d|额恶e|发法f|嘎g|哈h|一i|加家j|卡k|拉l|妈马m|拿那n|哦o|怕p|七q|然r|撒s|他t|瓦w|西x|压y|杂z";
+  map.split("|").forEach(x=>{const c=x.slice(-1);for(let i=0;i<x.length-1;i++)PINYIN_FIRST[x[i]]=c;});
+})();
+function lazyPinyin(s) {
+  const result = [];
+  for (const ch of s) {
+    const code = ch.charCodeAt(0);
+    if (code >= 0x4e00 && code <= 0x9fff) {
+      result.push(PINYIN_FIRST[ch] || ch);
+    } else {
+      result.push(ch);
+    }
+  }
+  return result;
+}
+function sortByPinyin(arr, keyFn) {
+  return arr.map(x => ({v:x, k:keyFn ? keyFn(x) : x}))
+    .sort((a,b) => {
+      const pa = (typeof a.k==='string'?lazyPinyin(a.k):a.k);
+      const pb = (typeof b.k==='string'?lazyPinyin(b.k):b.k);
+      for (let i=0;i<Math.min(pa.length,pb.length);i++) {
+        if (pa[i]<pb[i]) return -1; if (pa[i]>pb[i]) return 1;
+      }
+      return pa.length - pb.length;
+    }).map(x=>x.v);
+}
+
+// ===================== Excel 读取 =====================
+function readFileToWorkbook(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => { try { const wb = XLSX.read(e.target.result, {type:"array"}); resolve(wb); } catch(err) { reject(err); } };
+    reader.onerror = () => reject(new Error("读取文件失败"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+function sheetToArrays(ws) {
+  return XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
+}
+
+// ===================== Sheet 类型识别 =====================
+function scoreSheetType(headers, rows) {
+  let salaryScore=0, baseDataScore=0;
+  for (const h of headers) {
+    const hl = (h+"").trim();
+    for (const comp of SALARY_COMPONENT_NAMES) { if (hl.includes(comp)) { salaryScore+=3; break; } }
+    for (const ind of BASE_DATA_HEADER_INDICATORS) { if (hl.includes(ind)) { baseDataScore+=3; break; } }
+    if (["姓名","工号","员工编号","职员代码","职员姓名"].some(a=>hl.includes(a))) salaryScore+=1;
+    if (["项目代码","项目名称"].some(a=>hl.includes(a))) { salaryScore+=1; baseDataScore+=1; }
+    if (["科目代码","科目名称","明细科目","一级科目"].some(a=>hl.includes(a))) baseDataScore+=3;
+  }
+  const sample = rows.slice(0,5);
+  let numCount=0;
+  for (const r of sample) { for (const v of r) { if(v!=null&&v!==""&&!isNaN(Number(v))) numCount++; } }
+  if (numCount > sample.length*2) salaryScore+=2;
+  let codePat=0;
+  for (const r of sample) {
+    for (const v of r) {
+      const s=(v+"").trim();
+      if (s.length>=8&&["5008","6602","2211","5002"].includes(s.slice(0,4))) { codePat++; break; }
+    }
+  }
+  if (codePat>=2) baseDataScore+=3;
+  let label="unknown";
+  if (salaryScore>=5&&salaryScore>baseDataScore) label="salary";
+  else if (baseDataScore>=5&&baseDataScore>salaryScore) label="basedata";
+  else if (salaryScore>=3) label="salary";
+  else if (baseDataScore>=3) label="basedata";
+  return {label,salaryScore,baseDataScore};
+}
+
+// ===================== 基础数据解析 =====================
+function parseBaseData(rows) {
+  if (rows.length<2) return {};
+  const lookup={}, localSalaryMap={}, cpLookup={};
+  const headers = rows[0].map(h=>(h+"").trim());
+  const col={};
+  for (let i=0;i<headers.length;i++) {
+    const h=headers[i];
+    if (h.includes("项目名称")) col.project_name=i;
+    else if (h.includes("项目简称")||h==="简称") col.short_name=i;
+    else if (h.includes("对方项目代码")) col.counterparty_code=i;
+    else if (h.includes("对方项目")) col.counterparty_name=i;
+    else if (h.includes("项目代码")) col.project_code=i;
+    else if (h.includes("课题名称")||h.includes("研发课题")||h.includes("研发项目")) col.rd_name=i;
+    else if (h.includes("课题代码")||h.includes("研发课题代码")) col.rd_code=i;
+    else if (h.includes("一级科目")) col.subject_level1=i;
+    else if (h.includes("明细科目")) col.subject_detail=i;
+    else if (h.includes("科目代码")) { if (!("subject_code" in col)) col.subject_code=i; else col.salary_account_code=i; }
+    else if (h.includes("工资名称")) col.salary_item_name=i;
+  }
+  const gv = (row,key) => { const idx=col[key]; if(idx!=null&&idx<row.length&&row[idx]!=null) return (row[idx]+"").trim(); return ""; };
+  for (let ri=1;ri<rows.length;ri++) {
+    const r=rows[ri], pn=gv(r,"project_name"), pc=gv(r,"project_code");
+    if (!pn||!pc) continue;
+    const rn=gv(r,"rd_name"), rc=gv(r,"rd_code"), sl=gv(r,"subject_level1"), sd=gv(r,"subject_detail"), sc=gv(r,"subject_code");
+    let sn=gv(r,"short_name"); if (sn==="None"||sn===""||sn==="无") sn="";
+    if (sd&&sc&&sc!=="None"&&sc!=="0") localSalaryMap[sd]=sc;
+    const sin=gv(r,"salary_item_name"), sac=gv(r,"salary_account_code");
+    if (sin&&sac&&sac!=="None"&&sac!=="0") localSalaryMap[sin]=sac;
+    const cpn=gv(r,"counterparty_name"),cpc=gv(r,"counterparty_code");
+    if (cpn&&cpc) cpLookup[cpn]=cpc;
+    if (rn&&rc) topicNameToCode[rn]=rc;
+    if (sl&&sc&&sl!=="应付职工薪酬"&&isDebitCode(sc)) expenseTypeToCode[sl]=sc;
+    lookup[pn]={project_code:pc,project_name:pn,short_name:sn,rd_name:rn,rd_code:rc,subject_code:sc,subject_level1:sl,subject_detail:sd,counterparty_code:cpc,counterparty_name:cpn};
+  }
+  for (let ri=1;ri<rows.length;ri++) {
+    const r=rows[ri], cpn=gv(r,"counterparty_name"), cpc=gv(r,"counterparty_code");
+    if (cpn&&cpc) cpLookup[cpn]=cpc;
+  }
+  counterpartyLookup = cpLookup;
+  return {lookup, localSalaryMap};
+}
+function lookupBaseData(name) { if (!name) return {}; if (baseDataLookup[name]) return baseDataLookup[name]; return {}; }
+
+// ===================== 工资数据解析 =====================
+function parseSalaryData(rows, sheetName) {
+  if (rows.length<2) return [];
+  const headers = rows[0].map(h=>(h+"").trim());
+  const auto={};
+  for (let i=0;i<headers.length;i++) {
+    const h=headers[i];
+    for (const tk of TARGET_KEYS) {
+      if (!(tk.key in auto)) {
+        for (const a of tk.aliases) { if (h===a||h.includes(a)) { auto[tk.key]=i; break; } }
+      }
+    }
+    for (const cn of SALARY_COMPONENT_NAMES) { if (h.includes(cn)&&!("comp_"+cn in auto)) auto["comp_"+cn]=i; }
+  }
+  const hasAuto = "project_name" in auto;
+  if (!hasAuto) {
+    // 手动映射: 尝试按位置推断
+  }
+  const employees=[];
+  for (let ri=1;ri<rows.length;ri++) {
+    const r=rows[ri];
+    const gv = (key) => { const i=auto[key]; return i!=null&&i<r.length&&r[i]!=null?(r[i]+"").trim():""; };
+    const pn=gv("project_name");
+    if (!pn||pn===""||pn==="项目") continue;
+    const rd=gv("rd_name");
+    const comps={};
+    let net=0;
+    for (const cn of SALARY_COMPONENT_NAMES) {
+      const idx=auto["comp_"+cn]; if (idx==null) continue;
+      const v=r[idx]; if (v==null||v==="") continue;
+      const val=parseFloat(v); if (isNaN(val)) continue;
+      if (cn==="实发金额") { net=val; continue; }
+      comps[cn]=(comps[cn]||0)+val;
+    }
+    if (Object.keys(comps).length===0&&net===0) continue;
+    if (net===0) net=Object.values(comps).reduce((a,b)=>a+b,0);
+    employees.push({
+      project_name:pn, project_code:gv("project_code"), rd_name:rd,
+      rd_code:gv("rd_code"), dept_code:gv("dept_code"), dept_name:gv("dept_name"),
+      employee_name:gv("employee_name"), employee_code:gv("employee_code"),
+      salary_components:comps, net_pay:net, raw_row:r
+    });
+  }
+  return employees;
+}
+
+// ===================== 模糊匹配 =====================
+function fuzzyFindProject(name, lookup) {
+  if (!name) return null; if (lookup[name]) return lookup[name];
+  const keys=Object.keys(lookup); let bestKey=null,bestScore=0;
+  for (const k of keys) {
+    let prefix=0; const minLen=Math.min(name.length,k.length);
+    for (let i=0;i<minLen;i++) { if(name[i]===k[i]) prefix++; else break; }
+    const score=prefix*2-Math.abs(name.length-k.length)*0.5;
+    if (prefix>=8&&score>bestScore) { const shorter=name.length<k.length?name:k,longer=name.length<k.length?k:name;let overlap=0;for(const c of shorter){if(longer.includes(c))overlap++;} if(overlap>=shorter.length*0.7){bestScore=score;bestKey=k;} }
+  }
+  return bestKey?lookup[bestKey]:null;
+}
+
+// ===================== 生成凭证 =====================
+function genUUID() { return crypto.randomUUID?crypto.randomUUID().slice(0,8):Math.random().toString(36).slice(2,10); }
+const R2 = v => Math.round(v*100)/100;
+
+// 计提工资
+function generateAccrualVouchers(employees, year, month, salaryYear, salaryMonth, periodDate, voucherWord) {
+  const groups={}, unmatched=new Set();
+  for (const emp of employees) {
+    let {project_name:pn, project_code:pc, rd_name:rn, rd_code:rc} = emp;
+    const bd = lookupBaseData(pn);
+    if (!pc&&bd) pc=bd.project_code||"";
+    let debitCode=bd.subject_code||"";
+    if (!debitCode||!isDebitCode(debitCode)) {
+      if (rn) debitCode=SUBJECT_CODES.rd_expense.code;
+      else { const et=bd.subject_level1||"", ec=expenseTypeToCode[et]||""; if(isDebitCode(ec)) debitCode=ec; else if(pn.includes("十八分公司")||(bd.short_name||"").includes("十八")) debitCode=expenseTypeToCode["管理费用"]||"660201"; else debitCode=SUBJECT_CODES.capital_expense.code; }
+      unmatched.add(pn);
+    }
+    if (rn&&!rc) rc=topicNameToCode[rn]||"";
+    const gk = pn+"|"+(rn||"")+"|"+debitCode;
+    if (!groups[gk]) groups[gk]={amount:0,creditMap:{},project_code:pc,project_name:pn,rd_code:rc,rd_name:rn,debitCode,personLabel:rn?"研发人员":"",deptCode:emp.dept_code||""};
+    for (const [cn,ca] of Object.entries(emp.salary_components)) {
+      const ccode=salaryItemToCode[cn]||"22110101";
+      groups[gk].amount+=ca;
+      if (!groups[gk].creditMap[cn]) groups[gk].creditMap[cn]={code:ccode,name:cn,amount:0};
+      groups[gk].creditMap[cn].amount+=ca;
+    }
+  }
+  const vouchers=[],excelRows=[];
+  const compOrder={}; SALARY_COMPONENT_NAMES.forEach((cn,i)=>compOrder[cn]=i);
+  const sortedEntries = sortByPinyin(Object.entries(groups), ([gk])=>gk);
+  sortedEntries.forEach(([gk,g],idx)=>{
+    const ces=Object.entries(g.creditMap).sort(([a],[b])=>(compOrder[a]||999)-(compOrder[b]||999)).map(([cn,ce])=>({code:ce.code,name:ce.name,amount:R2(ce.amount)}));
+    const v={id:genUUID(),project_code:g.project_code,project_name:g.project_name,rd_code:g.rd_code,rd_name:g.rd_name,
+      debit_code:g.debitCode,debit_amount:R2(g.amount),credit_entries:ces,credit_total:R2(ces.reduce((s,e)=>s+e.amount,0)),
+      person_label:g.personLabel,dept_code:g.deptCode,sort_order:idx};
+    vouchers.push(v);
+    const isRd=v.debit_code==="50080101", isAdmin=v.debit_code==="660201";
+    const fpc=isAdmin?"":v.project_code, frc=v.rd_code, fdc=isRd?"":(v.project_name==="十八分公司"?"001":"008");
+    const sumBase=`补计提【${v.project_name}】${v.person_label}`;
+    const dr=[0,v.debit_code,"","RMB",year,month,periodDate,voucherWord,
+      `${sumBase}${salaryYear}年${salaryMonth}月应发工资（${salaryMonth}月表）`,R2(v.debit_amount),"",
+      "","","","","","",0,"","","","","","","",fpc,v.project_name,"","","",frc,v.rd_name,"","","",fdc,"","","","","","",""];
+    excelRows.push(dr);
+    for (const ce of ces) {
+      const crc=v.rd_name?"":v.rd_code, crdc=v.project_name==="十八分公司"?"001":"008";
+      excelRows.push([0,ce.code,"","RMB",year,month,periodDate,voucherWord,
+        `${sumBase}${salaryYear}年${salaryMonth}月${ce.name}（${salaryMonth}月表`,"",R2(ce.amount),
+        "","","","","","",0,"","","","","","","",v.project_code,v.project_name,"","","",crc,v.rd_name,"","","",crdc,"","","","","","",""]);
+    }
+  });
+  for (const r of excelRows) r[0]=r[1]==="50080101"?1:2;
+  const total=R2(vouchers.reduce((s,v)=>s+v.debit_amount,0));
+  return {success:true,year:salaryYear,month:salaryMonth,period:`${year}-${month}`,period_date:periodDate,voucher_word:voucherWord,
+    employee_count:employees.length,voucher_count:vouchers.length,total_amount:total,vouchers,excel_rows:excelRows,
+    base_data_active:Object.keys(baseDataLookup).length>0,unmatched_projects:[...unmatched]};
+}
+
+// 发放工资
+function generatePaymentVouchers(employees, year, month, salaryYear, salaryMonth, periodDate, voucherWord) {
+  const hqRd={}, hqAll={}, hqRdNets={}; let hqAllNet=0, hqProjCode="", hqProjName="";
+  const projectRd={}, projectAll={};
+  for (const emp of employees) {
+    const pn=emp.project_name||"", rn=emp.rd_name||"", isHq=HQ_KEYWORDS.some(k=>(pn||"").includes(k));
+    const net=emp.net_pay||0, total=Object.values(emp.salary_components).reduce((a,b)=>a+b,0);
+    if (isHq) {
+      if (!hqProjCode) { const bd=lookupBaseData(pn); hqProjCode=emp.project_code||bd.project_code||""; hqProjName=pn; }
+      if (rn) {
+        const rk=rn||"(未指定课题)"; hqRdNets[rk]=(hqRdNets[rk]||0)+net;
+        hqRd[rk]=hqRd[rk]||{};
+        for (const [cn,ca] of Object.entries(emp.salary_components)) {
+          const ccode=salaryItemToCode[cn]||(cn==="岗位工资"?"22110101":"22110102");
+          hqRd[rk][cn]=hqRd[rk][cn]||{code:ccode,name:cn,amount:0};
+          hqRd[rk][cn].amount+=ca;
+        }
+      } else { hqAllNet+=net; for (const [cn,ca] of Object.entries(emp.salary_components)) { const ccode=salaryItemToCode[cn]||(cn==="岗位工资"?"22110101":"22110102"); hqAll[cn]=hqAll[cn]||{code:ccode,name:cn,amount:0}; hqAll[cn].amount+=ca; } }
+    } else {
+      let pc=emp.project_code||""; const bd=lookupBaseData(pn); if (!pc&&bd) pc=bd.project_code||"";
+      const sn=bd.short_name||pn;
+      if (rn) {
+        let rc=emp.rd_code||""; if (!rc&&rn) rc=topicNameToCode[rn]||"";
+        const rk=pn+"|"+rn; projectRd[rk]=projectRd[rk]||{amount:0,project_code:pc,project_name:pn,short_name:sn,rd_code:rc,rd_name:rn,net_pay:0};
+        projectRd[rk].amount+=total; projectRd[rk].net_pay+=net;
+      } else {
+        projectAll[pn]=projectAll[pn]||{amount:0,project_code:pc,project_name:pn,short_name:sn,rd_code:"",net_pay:0};
+        projectAll[pn].amount+=total; projectAll[pn].net_pay+=net;
+      }
+    }
+  }
+  const allVouchers=[], compOrder={}; SALARY_COMPONENT_NAMES.forEach((cn,i)=>compOrder[cn]=i);
+  function makeHqGroup(label, compMap, personLabel, netTotal) {
+    if (!compMap||Object.keys(compMap).length===0) return null;
+    const des=sortByPinyin(Object.keys(compMap),k=>k).map(cn=>{const ce=compMap[cn];return{code:salaryItemToCode[cn]||ce.code||"22110102",name:ce.name,amount:R2(ce.amount)};});
+    const total=R2(netTotal>0?netTotal:des.reduce((s,e)=>s+e.amount,0));
+    return {id:genUUID(),project_code:hqProjCode,project_name:label,hq_project_code:hqProjCode,hq_project_name:hqProjName,rd_code:"",rd_name:"",debit_code:"",debit_amount:total,
+      credit_entries:[{code:SUBJECT_CODES.bank_account.code,name:SUBJECT_CODES.bank_account.name,amount:total}],credit_total:total,debit_entries:des,person_label:personLabel,dept_code:"",sort_order:0};
+  }
+  function makeProjectGroup(label, projMap, personLabel, netTotal) {
+    if (!projMap||Object.keys(projMap).length===0) return null;
+    const sortedKeys=sortByPinyin(Object.keys(projMap),k=>k);
+    const des=sortedKeys.map(pk=>{const pd=projMap[pk];const pn=pd.net_pay>0?pd.net_pay:pd.amount;return {code:SUBJECT_CODES.contract_cost.code,name:SUBJECT_CODES.contract_cost.name,amount:R2(pn),project_code:pd.project_code,project_name:pd.project_name,project_short:pd.short_name||pd.project_name,rd_code:pd.rd_code,rd_name:pd.rd_name||""};});
+    const total=R2(netTotal>0?netTotal:des.reduce((s,e)=>s+e.amount,0));
+    return {id:genUUID(),project_code:"",project_name:label,rd_code:"",rd_name:"",debit_code:"",debit_amount:total,
+      credit_entries:[{code:SUBJECT_CODES.bank_account.code,name:SUBJECT_CODES.bank_account.name,amount:total}],credit_total:total,debit_entries:des,person_label:personLabel,dept_code:"",sort_order:0};
+  }
+  const hqLabel=hqProjName||"分公司机关本部"; let so=1;
+  const hqRdSorted=sortByPinyin(Object.keys(hqRd),k=>k);
+  for (const rk of hqRdSorted) { const g=makeHqGroup(hqLabel,hqRd[rk],"研发人员",hqRdNets[rk]||0); if(g){g.sort_order=so++;allVouchers.push(g);} }
+  const prn=Object.values(projectRd).reduce((s,p)=>s+(p.net_pay||0),0);
+  const g2=makeProjectGroup("部分项目",projectRd,"研发人员",prn); if(g2){g2.sort_order=so++;allVouchers.push(g2);}
+  const g3=makeHqGroup(hqLabel,hqAll,"",hqAllNet); if(g3){g3.sort_order=so++;allVouchers.push(g3);}
+  const pan=Object.values(projectAll).reduce((s,p)=>s+(p.net_pay||0),0);
+  const g4=makeProjectGroup(`${hqLabel}、部分项目`,projectAll,"",pan); if(g4){g4.sort_order=so++;allVouchers.push(g4);}
+  const allRows=[];
+  for (const v of allVouchers) {
+    const isHqV=!!v.hq_project_code;
+    for (const de of (v.debit_entries||[])) {
+      const code=de.code||"", is2211=code.startsWith("2211"), is112402=code==="112402";
+      const cpCode=is112402&&de.project_name?(counterpartyLookup[de.project_name]||""):"";
+      const sProj=isHqV?"分公司机关本部":(de.project_short||de.project_name||v.project_name);
+      const row=Array(TEMPLATE_HEADERS.length).fill("");
+      row[0]=0;row[1]=code;row[2]=de.name||"";row[3]="RMB";row[4]=year;row[5]=month;row[6]=periodDate;row[7]=voucherWord;
+      row[8]=`付${is112402?"【"+sProj+"】":sProj}${v.person_label}${salaryYear}年${salaryMonth}月${is112402?"工资":de.name}（${salaryMonth}月表）`;
+      row[9]=R2(de.amount);row[25]=hqProjCode;row[26]=hqProjName;row[27]=cpCode;
+      if (is112402) { row[23]=periodDate; row[28]="KS0000000000000001"; row[39]="0890"; }
+      if (is2211) { row[30]="0004999"; row[35]="001"; }
+      allRows.push(row);
+    }
+    if (v.credit_entries) { const ce=v.credit_entries[0]; const cp=isHqV?"分公司机关本部":"部分项目";
+      const row=Array(TEMPLATE_HEADERS.length).fill("");
+      row[0]=0;row[1]=ce.code;row[2]=ce.name;row[3]="RMB";row[4]=year;row[5]=month;row[6]=periodDate;row[7]=voucherWord;
+      row[8]=`付${cp}${v.person_label}${salaryYear}年${salaryMonth}月工资（${salaryMonth}月表`;row[10]=R2(ce.amount);row[25]=hqProjCode;row[26]=hqProjName;row[41]="104";
+      allRows.push(row);
+    }
+  }
+  for (const r of allRows) r[0]=1;
+  const totalAmt=R2(allVouchers.reduce((s,v)=>s+v.debit_amount,0));
+  return {success:true,year:salaryYear,month:salaryMonth,period:`${year}-${month}`,period_date:periodDate,voucher_word:voucherWord,
+    employee_count:employees.length,voucher_count:allVouchers.length,total_amount:totalAmt,vouchers:allVouchers,excel_rows:allRows,
+    base_data_active:Object.keys(baseDataLookup).length>0,unmatched_projects:[],voucher_type:"payment"};
+}
+
+// 结转工资
+function generateCarryForwardVouchers(employees, year, month, salaryYear, salaryMonth, periodDate, voucherWord) {
+  const rdGroups={}, nonRdGroups={}, compOrder={}; CF_SALARY_COMPONENTS.forEach((cn,i)=>compOrder[cn]=i);
+  for (const emp of employees) {
+    const pn=emp.project_name||""; if (HQ_KEYWORDS.some(k=>(pn||"").includes(k))) continue;
+    const rn=emp.rd_name||"", pkey=rn?(pn+"|"+rn):pn; let pc=emp.project_code||""; const bd=lookupBaseData(pn); if (!pc&&bd) pc=bd.project_code||""; const sn=bd.short_name||pn;
+    const t=rn?rdGroups:nonRdGroups; t[pkey]=t[pkey]||{project_code:pc,project_name:pn,short_name:sn,net_pay:0,pos_salary2:0,components:{}};
+    t[pkey].net_pay+=emp.net_pay||0; t[pkey].pos_salary2+=(emp.salary_components["岗位工资2"]||0);
+    for (const [cn,ca] of Object.entries(emp.salary_components)) { if (CF_SALARY_COMPONENTS.includes(cn)) { t[pkey].components[cn]=(t[pkey].components[cn]||0)+ca; } }
+  }
+  const allRows=[], allVouchers=[]; let totalAmt=0;
+  const rdSorted=sortByPinyin(Object.entries(rdGroups),([k])=>k);
+  const nonRdSorted=sortByPinyin(Object.entries(nonRdGroups),([k])=>k);
+  function buildRows(pkey, pd, personLabel, vid) {
+    const ps=pd.short_name, pc=pd.project_code, np=R2(pd.net_pay), p2=R2(pd.pos_salary2);
+    const eff=R2(np>0?np:p2+Object.values(pd.components).reduce((a,b)=>a+R2(b),0));
+    const des=[], pt=personLabel||"";
+    const s1c=salaryItemToCode["岗位工资2"]||"22110101";
+    des.push({code:s1c,name:"岗位工资",amount:p2});
+    allRows.push([0,s1c,"","RMB",year,month,periodDate,voucherWord,`结转代付【${ps}】${pt}${salaryYear}年${salaryMonth}月岗位工资（${salaryMonth}月表）`,p2,0,"","","","","","",0,"","","","","","","",pc,"","","","","0004999","","","","008","","","","","","",""]);
+    for (const cn of sortByPinyin(Object.keys(pd.components),k=>compOrder[k]||999)) {
+      const ca=R2(pd.components[cn]); if (ca<=0) continue;
+      const sc=salaryItemToCode[cn]||"22110102"; des.push({code:sc,name:cn,amount:ca});
+      allRows.push([0,sc,"","RMB",year,month,periodDate,voucherWord,`结转代付【${ps}】${pt}${salaryYear}年${salaryMonth}月${cn}（${salaryMonth}月表）`,ca,0,"","","","","","",0,"","","","","","","",pc,"","","","","0004999","","","","008","","","","","","",""]);
+    }
+    allRows.push([0,"112402","","RMB",year,month,periodDate,voucherWord,`结转代付【${ps}】${pt}${salaryYear}年${salaryMonth}月工资（${salaryMonth}月表）`,0,eff,"","","","","","",0,"","","","","","","",pc,"","C6Q103020223014","KS0000000000000001","","","","","","","","","","0890","","","",""]);
+    totalAmt+=eff;
+    return {id:genUUID(),project_code:pc,project_name:ps,short_name:ps,debit_amount:eff,credit_total:eff,person_label:pt,voucher_id:vid,voucher_word:voucherWord,debit_entries:des,credit_entries:[{code:"112402",name:"工资",amount:eff}]};
+  }
+  rdSorted.forEach(([k,pd],i)=>allVouchers.push(buildRows(k,pd,"研发人员",i+1)));
+  nonRdSorted.forEach(([k,pd],i)=>allVouchers.push(buildRows(k,pd,"",allVouchers.length+1)));
+  for (const r of allRows) r[0]=1;
+  return {success:true,year:salaryYear,month:salaryMonth,period:`${year}-${month}`,period_date:periodDate,voucher_word:voucherWord,
+    employee_count:employees.length,voucher_count:allVouchers.length,total_amount:R2(totalAmt),vouchers:allVouchers,excel_rows:allRows,
+    base_data_active:Object.keys(baseDataLookup).length>0,unmatched_projects:[],voucher_type:"carry_forward"};
+}
+
+// 代扣费用
+function generateWithholdingVouchers(employees, year, month, salaryYear, salaryMonth, periodDate, voucherWord) {
+  const rdGroups={}, nonRdGroups={};
+  for (const emp of employees) {
+    const pn=(emp.project_name||"").trim(); if (!pn) continue; const rn=(emp.rd_name||"").trim();
+    if (rn) { const k=pn+"|"+rn; rdGroups[k]=rdGroups[k]||[]; rdGroups[k].push(emp); }
+    else { nonRdGroups[pn]=nonRdGroups[pn]||[]; nonRdGroups[pn].push(emp); }
+  }
+  function getBaseInfo(projName) { const info=baseDataLookup[projName]||{}; return {code:info.project_code||"",short:info.short_name||projName}; }
+  const saYear=year+"", saMonth=month+"", exportRows=[], allVouchers=[];
+  const vid={val:1}; let totalAmt=0;
+  function buildVoucher(projName, emps, personLabel) {
+    const {code:hqCode,short:shortName}=getBaseInfo(projName);
+    const isHq=projName==="十八分公司"||projName.includes("机关")||projName.includes("本部");
+    const deptCode=isHq?"001":"008", totals={};
+    for (const comp of WH_DEDUCTION_COMPONENTS) totals[comp]=R2(emps.reduce((s,e)=>{const v=parseFloat(e[comp])||0;return s+v;},0));
+    const grand=R2(WH_DEDUCTION_COMPONENTS.reduce((s,c)=>s+(totals[c]||0),0));
+    if (grand<=0) return;
+    const pLabel=personLabel||"", ces=[];
+    for (const comp of WH_DEDUCTION_COMPONENTS) { const amt=totals[comp]; if (amt<=0) continue; const cl=WH_COMPONENT_LABEL[comp]||comp; ces.push({code:WH_COMPONENT_TO_CODE[comp],name:cl,amount:amt,customer_code:WH_COMPONENT_TO_CUSTOMER[comp]||"",summary:`代扣【${shortName}】${pLabel}${saYear}年${saMonth}月${cl}（${saMonth}月表）`}); }
+    const drSummary=`代扣【${shortName}】${pLabel}${saYear}年${saMonth}月个人社保、公积金、个税（${saMonth}月表）`;
+    allVouchers.push({id:"wh-"+vid.val,project_key:projName,project_name:projName,person_label:pLabel,debit_amount:grand,debit_code:"22110101",credit_total:grand,dept_code:deptCode,debit_entries:[{code:"22110101",name:drSummary,amount:grand,project_name:projName,dept_code:deptCode}],credit_entries:ces,hq_code:hqCode,dept_code:deptCode});
+    const dr=[0,"22110101","","RMB",saYear,saMonth,periodDate,voucherWord,drSummary,grand,0,"","","","","","",0,"","","","","","","",hqCode,projName,"","","","0004999","","","","",deptCode,"","","","","","",""];
+    exportRows.push(dr);
+    for (const ce of ces) {
+      exportRows.push([0,ce.code,"","RMB",saYear,saMonth,periodDate,voucherWord,ce.summary,0,ce.amount,"","","","","","",0,"","","","","","","",hqCode,projName,"",ce.customer_code,"","","","","","","","","","","","","","",""]);
+    }
+    totalAmt+=grand; vid.val++;
+  }
+  const rdSorted=sortByPinyin(Object.entries(rdGroups),([k])=>k);
+  const nonRdSorted=sortByPinyin(Object.entries(nonRdGroups),([k])=>k);
+  rdSorted.forEach(([k,emps])=>{ const pn=k.split("|")[0]; buildVoucher(pn,emps,"研发人员"); });
+  nonRdSorted.forEach(([pn,emps])=>buildVoucher(pn,emps,""));
+  for (const r of exportRows) r[0]=1;
+  return {success:true,year:salaryYear,month:salaryMonth,period:`${year}-${month}`,period_date:periodDate,voucher_word:voucherWord,
+    employee_count:employees.length,voucher_count:allVouchers.length,total_amount:R2(totalAmt),vouchers:allVouchers,excel_rows:exportRows,
+    unmatched_projects:[],voucher_type:"withholding"};
+}
+
+// ===================== 主流程 =====================
+async function detectAndGenerate() {
+  if (!selectedFile) return;
+  showLoading("正在解析文件...");
+  try {
+    const wb = await readFileToWorkbook(selectedFile);
+    const sheets = [];
+    wb.SheetNames.forEach(name => {
+      const ws = wb.Sheets[name], data = sheetToArrays(ws);
+      if (data.length<2) return;
+      const headers = data[0].map(h=>(h+"").trim());
+      const {label, salaryScore, basedataScore} = scoreSheetType(headers, data.slice(1));
+      sheets.push({name, headers, rows:data.slice(1), label, salaryScore, basedataScore, data, rowCount:data.length-1});
+    });
+    detectResult = {sheets, wb};
+    salarySheetName = sheets.find(s=>s.label==="salary")?.name||null;
+    basedataSheetName = sheets.find(s=>s.label==="basedata")?.name||null;
+    sheetRoles = {};
+    sheets.forEach(s => { sheetRoles[s.name] = s.label==="salary"?"salary":(s.label==="basedata"?"basedata":"ignore"); });
+    baseDataLookup={};counterpartyLookup={};topicNameToCode={};salaryItemToCode={};expenseTypeToCode={};
+    if (basedataSheetName) {
+      const bds = sheets.find(s=>s.name===basedataSheetName);
+      if (bds) {
+        const {lookup, localSalaryMap} = parseBaseData(bds.data);
+        baseDataLookup=lookup;
+        Object.assign(salaryItemToCode, localSalaryMap);
+      }
+    }
+    if (!salarySheetName) { showErr("未找到工资表 Sheet，请确认文件格式"); hideLoading(); return; }
+    renderSheetCards(sheets);
+    $id("step2Card").style.display="block"; setStep(2);
+    $id("step2Card").scrollIntoView({behavior:"smooth"});
+    hideLoading();
+    $id("mapError").classList.remove("show");
+  } catch(e) { showErr("解析失败: "+e.message); hideLoading(); }
+}
+function renderSheetCards(sheets) {
+  if (sheets.length<=1) { $id("sheetCards").innerHTML=""; return; }
+  let html='<div class="sheet-cards">';
+  for (const s of sheets) {
+    const cls=s.label==="salary"?"sheet-salary":(s.label==="basedata"?"sheet-basedata":"sheet-unknown");
+    const rl=s.label==="salary"?"工资表":(s.label==="basedata"?"基础数据表":"未识别");
+    html+=`<div class="sheet-card ${cls}" ondblclick="toggleSheetRole('${s.name}')">
+      <div class="sheet-card-header"><span class="sheet-card-name">${s.name}</span>
+      <div class="sheet-card-role">${["salary","basedata","ignore"].map(r=>`<button class="role-btn${sheetRoles[s.name]===r?' active role-'+r:''}" onclick="event.stopPropagation();setSheetRole('${s.name}','${r}')">${r==="salary"?"工资表":(r==="basedata"?"基础数据":"忽略")}</button>`).join("")}</div></div>
+      <div class="sheet-card-meta">${s.rowCount} 行数据 | 工资得分:${s.salaryScore} 基础数据得分:${s.basedataScore}</div>
+      <div class="sheet-card-detail">当前角色: <b>${rl}</b></div></div>`;
+  }
+  html+='</div>'; $id("sheetCards").innerHTML=html;
+}
+function setSheetRole(name, role) {
+  sheetRoles[name]=role; salarySheetName=null; basedataSheetName=null;
+  for (const [n,r] of Object.entries(sheetRoles)) { if (r==="salary") salarySheetName=n; if (r==="basedata") basedataSheetName=n; }
+  renderSheetCards(detectResult.sheets);
+  if (basedataSheetName) {
+    const bds=detectResult.sheets.find(s=>s.name===basedataSheetName);
+    if (bds) { const {lookup,localSalaryMap}=parseBaseData(bds.data); baseDataLookup=lookup; Object.assign(salaryItemToCode,localSalaryMap); }
+  } else { baseDataLookup={};counterpartyLookup={};salaryItemToCode={}; }
+}
+function toggleSheetRole(name) {
+  const roles=["salary","basedata","ignore"], current=sheetRoles[name]||"unknown", idx=roles.indexOf(current);
+  setSheetRole(name, roles[(idx+1)%3]);
+}
+function submitGenerate() {
+  if (!salarySheetName) { showErr2("请先指定工资表 Sheet"); return; }
+  showLoading("正在生成凭证..."); hideResult();
+  const voucherType=$id("voucherType").value, periodVal=$id("period").value;
+  const [year,month]=periodVal.split("-"), salVal=$id("salaryMonth").value, [salY,salM]=salVal.split("-");
+  const periodDate=$id("periodDate").value||`${year}-${month}-01`, vw=$id("voucherWord").value;
+  let ss=detectResult.sheets.find(s=>s.name===salarySheetName); if (!ss) { showErr("找不到工资表");hideLoading();return; }
+  setTimeout(()=>{
+    try {
+      const employees=parseSalaryData(ss.data, salarySheetName); if (employees.length===0) { showErr("未解析到员工数据");hideLoading();return; }
+      let result;
+      if (voucherType==="carry_forward") result=generateCarryForwardVouchers(employees,year,month,salY,salM,periodDate,vw);
+      else if (voucherType==="withholding") result=generateWithholdingVouchers(employees,year,month,salY,salM,periodDate,vw);
+      else if (voucherType==="payment") result=generatePaymentVouchers(employees,year,month,salY,salM,periodDate,vw);
+      else result=generateAccrualVouchers(employees,year,month,salY,salM,periodDate,vw);
+      genResult=result; currentFilter='all'; renderResult(result); setStep(3);
+      $id("resultArea").style.display="block"; $id("resultArea").scrollIntoView({behavior:"smooth"});
+      hideLoading(); toast("凭证生成成功","success");
+    } catch(e) { showErr("生成失败: "+e.message); hideLoading(); }
+  },100);
+}
+
+// ===================== 结果渲染 =====================
+function renderResult(d) {
+  const td=d.vouchers.reduce((s,v)=>s+(v.debit_amount||0),0), tc=d.vouchers.reduce((s,v)=>s+(v.credit_total||0),0), balanced=Math.abs(td-tc)<0.01;
+  $id("balanceBadge").textContent=balanced?"借贷平衡":"借贷不平"; $id("balanceBadge").className="badge "+(balanced?"badge-ok":"badge-warn");
+  let es="";
+  if (d.voucher_type==="carry_forward") es+=`<div class="stat-card" style="background:#e8f5e9;"><div class="value" style="font-size:16px;">结转(转字)</div><div class="label">凭证类型</div></div>`;
+  else if (d.voucher_type==="payment") es+=`<div class="stat-card" style="background:#e8f5e9;"><div class="value" style="font-size:16px;">发放(银字)</div><div class="label">凭证类型</div></div>`;
+  else if (d.voucher_type==="withholding") es+=`<div class="stat-card" style="background:#e8f5e9;"><div class="value" style="font-size:16px;">代扣(转字)</div><div class="label">凭证类型</div></div>`;
+  else es+=`<div class="stat-card" style="background:#e8f5e9;"><div class="value" style="font-size:16px;">计提(转字)</div><div class="label">凭证类型</div></div>`;
+  if (d.base_data_active) es+=`<div class="stat-card" style="background:#e8f5e9;"><div class="value" style="font-size:16px;">已启用</div><div class="label">基础数据引用</div></div>`;
+  if (d.unmatched_projects?.length) es+=`<div class="stat-card" style="background:#fff3e0;"><div class="value">${d.unmatched_projects.length}</div><div class="label" title="${d.unmatched_projects.join('，')}">未匹配项目</div></div>`;
+  if (!balanced) es+=`<div class="stat-card" style="background:#ffebee;"><div class="value">${Math.abs(td-tc).toFixed(2)}</div><div class="label">借贷差额</div></div>`;
+  $id("statsGrid").innerHTML=`<div class="stat-card"><div class="value">${d.employee_count}</div><div class="label">员工数量</div></div><div class="stat-card"><div class="value">${d.voucher_count}</div><div class="label">凭证组数</div></div><div class="stat-card"><div class="value">${(d.total_amount||0).toLocaleString("zh-CN",{minimumFractionDigits:2})}</div><div class="label">金额合计(元)</div></div><div class="stat-card"><div class="value">${d.year}-${d.month}</div><div class="label">工资所属月份</div></div>${es}`;
+  renderVoucherList();
+}
+function filterVouchers() { currentFilter='search'; renderVoucherList(); }
+function setFilter(type) { currentFilter=type; $id("searchInput").value=""; renderVoucherList(); }
+function getFilteredVouchers() {
+  if (!genResult?.vouchers) return [];
+  let vs=genResult.vouchers;
+  if (currentFilter==='rd') vs=vs.filter(v=>v.rd_name||(v.person_label||'').includes('研发'));
+  else if (currentFilter==='non-rd') vs=vs.filter(v=>!v.rd_name&&!(v.person_label||'').includes('研发'));
+  else if (currentFilter==='unbalanced') vs=vs.filter(v=>Math.abs(v.debit_amount-(v.credit_total||0))>=0.01);
+  else if (currentFilter==='search') { const q=$id("searchInput").value.toLowerCase().trim(); if(q) vs=vs.filter(v=>(v.project_name||'').toLowerCase().includes(q)||(v.rd_name||'').toLowerCase().includes(q)||(v.debit_code||'').toLowerCase().includes(q)); }
+  $id("filterInfo").textContent=vs.length!==genResult.vouchers.length?`显示 ${vs.length}/${genResult.vouchers.length} 组凭证`:"";
+  return vs;
+}
+function renderVoucherList() {
+  const vs=getFilteredVouchers(); let html='';
+  vs.forEach(v=>{
+    const bal=Math.abs(v.debit_amount-(v.credit_total||0))<0.01;
+    html+=`<div class="voucher-group ${bal?'balanced':'unbalanced'}">
+      <div class="voucher-header" onclick="this.parentElement.classList.toggle('expanded')">
+        <h4>${v.person_label||"非研发"} | ${v.project_name||""} ${v.rd_name?"["+v.rd_name+"]":""}</h4>
+        <div class="meta">借: ${(v.debit_amount||0).toLocaleString("zh-CN",{minimumFractionDigits:2})} | 贷: ${(v.credit_total||0).toLocaleString("zh-CN",{minimumFractionDigits:2})}</div>
+      </div>
+      <div class="voucher-body">
+        <table class="voucher-table"><tr><th>方向</th><th>科目代码</th><th>科目名称</th><th style="text-align:right;">金额</th></tr>`;
+    (v.debit_entries||[]).forEach(e=>{ html+=`<tr><td class="direction-debit">借</td><td>${e.code}</td><td>${e.name}${e.project_short?" ("+e.project_short+")":""}${e.rd_name?" ["+e.rd_name+"]":""}</td><td class="amount">${(e.amount||0).toLocaleString("zh-CN",{minimumFractionDigits:2})}</td></tr>`; });
+    (v.credit_entries||[]).forEach(e=>{ html+=`<tr><td class="direction-credit">贷</td><td>${e.code}</td><td>${e.name}</td><td class="amount">${(e.amount||0).toLocaleString("zh-CN",{minimumFractionDigits:2})}</td></tr>`; });
+    html+=`</table></div></div>`;
+  });
+  $id("voucherList").innerHTML=html||'<div class="empty-state">无匹配凭证</div>';
+}
+function expandAll() { document.querySelectorAll(".voucher-group").forEach(g=>g.classList.add("expanded")); }
+function collapseAll() { document.querySelectorAll(".voucher-group").forEach(g=>g.classList.remove("expanded")); }
+// CSS for expanded state
+const styleExtra = document.createElement("style");
+styleExtra.textContent = ".voucher-group .voucher-body { display:none; } .voucher-group.expanded .voucher-body { display:block; }";
+document.head.appendChild(styleExtra);
+
+// ===================== Excel 导出 =====================
+function exportExcel() {
+  if (!genResult?.excel_rows) { toast("没有可导出的数据","error"); return; }
+  const wb=XLSX.utils.book_new(), wsData=[TEMPLATE_HEADERS,...genResult.excel_rows];
+  const ws=XLSX.utils.aoa_to_sheet(wsData);
+  for (let i=1;i<wsData.length;i++) {
+    const r=wsData[i]; const col=XLSX.utils.encode_cell({r:i,c:0});
+    if (ws[col]) ws[col].z="#";
+    const amtCols=[9,10]; for (const c of amtCols) { const cc=XLSX.utils.encode_cell({r:i,c}); if (ws[cc]&&typeof ws[cc].v==="number") ws[cc].z="0.00"; }
+  }
+  XLSX.utils.book_append_sheet(wb,ws,"凭证");
+  XLSX.writeFile(wb,`凭证_${genResult.year}_${genResult.month}.xlsx`);
+  toast("凭证 Excel 已下载","success");
+}
+function exportJSON() {
+  if (!genResult) return; const data=JSON.stringify(genResult.vouchers,null,2);
+  const blob=new Blob([data],{type:"application/json"}),url=URL.createObjectURL(blob);
+  const a=document.createElement("a");a.href=url;a.download=`凭证_${genResult.year}_${genResult.month}.json`;a.click();URL.revokeObjectURL(url);
+}
+
+// ===================== 初始化 =====================
+(function() {
+  const now=new Date(), m=now.getMonth(), y=now.getFullYear(), lm=new Date(y,m-1,1);
+  const sm=(lm.getMonth()+1).toString().padStart(2,"0");
+  $id("period").value=`${lm.getFullYear()}-${sm}`;
+  $id("salaryMonth").value=`${lm.getFullYear()}-${sm}`;
+  $id("periodDate").value=`${lm.getFullYear()}-${sm}-23`;
+  $id("voucherType").addEventListener("change",function(){
+    const vt=this.value;$id("voucherWord").value=vt==="payment"?"银":"转";
+  });
+  $id("voucherWord").value="转";
+  $id("errorMsg").classList.remove("show");
+})();
+</script>
+</body>
+</html>
