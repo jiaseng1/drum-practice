@@ -178,8 +178,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 <script>
 // ===================== 常量 =====================
 const HQ_KEYWORDS = ["十八", "机关", "本部", "分公司"];
-const SALARY_COMPONENT_NAMES = ["岗位工资","工龄工资","交通补贴","通讯补贴","职称津贴","证书津贴","餐费补贴","浮动绩效","驻外津贴","奖金","加班费","实发金额"];
-const BASE_DATA_HEADER_INDICATORS = ["项目简称","一级科目","明细科目","科目代码","课题代码","课题名称","投入产出科目","科目名称"];
+const SALARY_COMPONENT_NAMES = ["岗位工资","工龄工资","交通补贴","通讯补贴","职称津贴","证书津贴","高温补贴","餐费补贴","浮动绩效","驻外津贴","奖金","加班费","应发工资","实发金额"];
+const BASE_DATA_HEADER_INDICATORS = ["项目简称","一级科目","明细科目","科目代码","课题代码","课题名称","投入产出科目","科目名称","客商"];
 const TARGET_KEYS = [
   {key:"project_name",label:"项目名称",aliases:["项目","项目名称","工程名称","工程项目"]},
   {key:"project_code",label:"项目代码",aliases:["项目代码","工程代码"]},
@@ -187,11 +187,11 @@ const TARGET_KEYS = [
   {key:"rd_code",label:"研发课题代码",aliases:["研发课题代码","研发项目代码","课题代码"]},
   {key:"dept_code",label:"部门代码",aliases:["部门代码","部门编号"]},
   {key:"dept_name",label:"部门名称",aliases:["部门","部门名称"]},
-  {key:"employee_name",label:"员工姓名",aliases:["姓名","员工姓名","职员姓名"]},
+  {key:"employee_name",label:"员工姓名",aliases:["姓名","员工姓名","职员姓名","职员"]},
   {key:"employee_code",label:"员工编号",aliases:["工号","员工编号","职员代码"]},
 ];
 const SUBJECT_CODES = {rd_expense:{code:"50080101",name:"研发支出-费用化支出"},capital_expense:{code:"50020201",name:"在建工程"},salary_base:{code:"22110101",name:"应付职工薪酬-岗位工资"},salary_other:{code:"22110102",name:"应付职工薪酬-补贴津贴"},bank_account:{code:"100202",name:"银行存款"},contract_cost:{code:"112402",name:"工资"}};
-const CF_SALARY_COMPONENTS = ["工龄工资","交通补贴","通讯补贴","职称津贴","证书津贴","餐费补贴","浮动绩效","驻外津贴"];
+const CF_SALARY_COMPONENTS = ["工龄工资","交通补贴","通讯补贴","职称津贴","证书津贴","高温补贴","餐费补贴","浮动绩效","驻外津贴"];
 const WH_DEDUCTION_COMPONENTS = ["养老保险","失业保险","医疗保险","公积金","个人所得税"];
 const WH_COMPONENT_TO_CODE = {"养老保险":"22410501","失业保险":"22410502","医疗保险":"22410505","公积金":"224106","个人所得税":"222111"};
 const WH_COMPONENT_TO_CUSTOMER = {"养老保险":"KS0000000000073877","失业保险":"KS0000000000073877","医疗保险":"KS0000000000073877","公积金":"KS0000000000011321","个人所得税":""};
@@ -213,7 +213,7 @@ function showLoading(txt) { $id("loadingText").textContent=txt;$id("loadingOverl
 function hideLoading() { $id("loadingOverlay").classList.remove("active"); }
 function hideResult() { $id("resultArea").style.display="none"; }
 function toast(msg,type) { const t=document.createElement("div");t.className="toast toast-"+(type||"info");t.textContent=msg;$id("toastContainer").appendChild(t);setTimeout(()=>t.remove(),3000); }
-function isDebitCode(code) { return code && !code.startsWith("2211"); }
+function isDebitCode(code) { return code && (code.startsWith("5")||code.startsWith("6")); }
 
 // ===================== 文件处理 =====================
 $id("fileInput").addEventListener("change", function(e) {
@@ -321,6 +321,7 @@ function scoreSheetType(headers, rows) {
 function parseBaseData(rows) {
   if (rows.length<2) return {};
   const lookup={}, localSalaryMap={}, cpLookup={};
+  const whMapCode={}, whMapCustomer={};
   const headers = rows[0].map(h=>(h+"").trim());
   const col={};
   for (let i=0;i<headers.length;i++) {
@@ -332,34 +333,57 @@ function parseBaseData(rows) {
     else if (h.includes("项目代码")) col.project_code=i;
     else if (h.includes("课题名称")||h.includes("研发课题")||h.includes("研发项目")) col.rd_name=i;
     else if (h.includes("课题代码")||h.includes("研发课题代码")) col.rd_code=i;
+    else if (h.includes("客商代码")) col.customer_code=i;
+    else if (h.includes("客商")) col.customer_name=i;
     else if (h.includes("一级科目")) col.subject_level1=i;
     else if (h.includes("明细科目")) col.subject_detail=i;
-    else if (h.includes("科目代码")) { if (!("subject_code" in col)) col.subject_code=i; else col.salary_account_code=i; }
-    else if (h.includes("工资名称")) col.salary_item_name=i;
+    else if (h.includes("科目代码")) col.subject_code=i;
   }
   const gv = (row,key) => { const idx=col[key]; if(idx!=null&&idx<row.length&&row[idx]!=null) return (row[idx]+"").trim(); return ""; };
   for (let ri=1;ri<rows.length;ri++) {
     const r=rows[ri], pn=gv(r,"project_name"), pc=gv(r,"project_code");
     if (!pn||!pc) continue;
     const rn=gv(r,"rd_name"), rc=gv(r,"rd_code"), sl=gv(r,"subject_level1"), sd=gv(r,"subject_detail"), sc=gv(r,"subject_code");
+    const cn=gv(r,"customer_name"), cc=gv(r,"customer_code");
+    const cpn=gv(r,"counterparty_name"), cpc=gv(r,"counterparty_code");
     let sn=gv(r,"short_name"); if (sn==="None"||sn===""||sn==="无") sn="";
-    if (sd&&sc&&sc!=="None"&&sc!=="0") localSalaryMap[sd]=sc;
-    const sin=gv(r,"salary_item_name"), sac=gv(r,"salary_account_code");
-    if (sin&&sac&&sac!=="None"&&sac!=="0") localSalaryMap[sin]=sac;
-    const cpn=gv(r,"counterparty_name"),cpc=gv(r,"counterparty_code");
+    const lk={project_code:pc,project_name:pn,short_name:sn,rd_name:rn,rd_code:rc,subject_code:isDebitCode(sc)?sc:"",subject_level1:sl,subject_detail:sd,counterparty_code:cpc,counterparty_name:cpn};
+    lookup[pn]=lk;
+    // WH component → KS code (客商 → 客商代码)
+    if (cn&&cc&&WH_DEDUCTION_COMPONENTS.includes(cn)) whMapCustomer[cn]=cc;
+    // Deduction component → 科目代码
+    if (sd&&sc&&WH_DEDUCTION_COMPONENTS.includes(sd)) whMapCode[sd]=sc;
+    // Salary item → 科目代码 (only 2211* codes, exclude debit codes in 明细科目)
+    else if (sd&&sc&&sc.startsWith("2211")) localSalaryMap[sd]=sc;
+    // 对方项目
     if (cpn&&cpc) cpLookup[cpn]=cpc;
+    // 研发课题 → code
     if (rn&&rc) topicNameToCode[rn]=rc;
-    if (sl&&sc&&sl!=="应付职工薪酬"&&isDebitCode(sc)) expenseTypeToCode[sl]=sc;
-    lookup[pn]={project_code:pc,project_name:pn,short_name:sn,rd_name:rn,rd_code:rc,subject_code:sc,subject_level1:sl,subject_detail:sd,counterparty_code:cpc,counterparty_name:cpn};
+    // Expense type → code (only debit codes)
+    if (sl&&sc&&isDebitCode(sc)) expenseTypeToCode[sl]=sc;
   }
-  for (let ri=1;ri<rows.length;ri++) {
-    const r=rows[ri], cpn=gv(r,"counterparty_name"), cpc=gv(r,"counterparty_code");
-    if (cpn&&cpc) cpLookup[cpn]=cpc;
-  }
+  // Update globals from base data (incremental)
+  Object.assign(WH_COMPONENT_TO_CODE, whMapCode);
+  Object.assign(WH_COMPONENT_TO_CUSTOMER, whMapCustomer);
   counterpartyLookup = cpLookup;
   return {lookup, localSalaryMap};
 }
-function lookupBaseData(name) { if (!name) return {}; if (baseDataLookup[name]) return baseDataLookup[name]; return {}; }
+function lookupBaseData(name) {
+  if (!name) return {};
+  name = String(name).trim();
+  if (baseDataLookup[name]) return baseDataLookup[name];
+  // Reverse lookup: try variants
+  const variants = [name, name+" ", name.replace(/\s+$/,"")];
+  for (const v of variants) { if (baseDataLookup[v]) return baseDataLookup[v]; }
+  // Try removing prefix chars (project number prefixes)
+  for (let cut=1; cut<=5; cut++) {
+    const sub = name.slice(cut);
+    if (sub && baseDataLookup[sub]) return baseDataLookup[sub];
+  }
+  // Try fuzzy match via fuzzyFindProject
+  const fd = fuzzyFindProject(name, baseDataLookup);
+  return fd || {};
+}
 
 // ===================== 工资数据解析 =====================
 function parseSalaryData(rows, sheetName) {
@@ -393,7 +417,7 @@ function parseSalaryData(rows, sheetName) {
       const idx=auto["comp_"+cn]; if (idx==null) continue;
       const v=r[idx]; if (v==null||v==="") continue;
       const val=parseFloat(v); if (isNaN(val)) continue;
-      if (cn==="实发金额") { net=val; continue; }
+      if (cn==="实发金额"||cn==="应发工资") { if (cn==="实发金额") net=val; continue; }
       comps[cn]=(comps[cn]||0)+val;
     }
     if (Object.keys(comps).length===0&&net===0) continue;
