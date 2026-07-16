@@ -178,7 +178,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC"
 <script>
 // ===================== 常量 =====================
 const HQ_KEYWORDS = ["十八", "机关", "本部", "分公司"];
-const SALARY_COMPONENT_NAMES = ["岗位工资","岗位工资2","工龄工资","交通补贴","通讯补贴","职称津贴","证书津贴","餐费补贴","浮动绩效","驻外津贴","奖金","加班费","实发金额"];
+const SALARY_COMPONENT_NAMES = ["岗位工资","工龄工资","交通补贴","通讯补贴","职称津贴","证书津贴","餐费补贴","浮动绩效","驻外津贴","奖金","加班费","实发金额"];
 const BASE_DATA_HEADER_INDICATORS = ["项目简称","一级科目","明细科目","科目代码","课题代码","课题名称","投入产出科目","科目名称"];
 const TARGET_KEYS = [
   {key:"project_name",label:"项目名称",aliases:["项目","项目名称","工程名称","工程项目"]},
@@ -374,6 +374,7 @@ function parseSalaryData(rows, sheetName) {
       }
     }
     for (const cn of SALARY_COMPONENT_NAMES) { if (h.includes(cn)&&!("comp_"+cn in auto)) auto["comp_"+cn]=i; }
+    for (const cn of WH_DEDUCTION_COMPONENTS) { if (h.includes(cn)&&!("comp_"+cn in auto)) auto["comp_"+cn]=i; }
   }
   const hasAuto = "project_name" in auto;
   if (!hasAuto) {
@@ -396,6 +397,15 @@ function parseSalaryData(rows, sheetName) {
       comps[cn]=(comps[cn]||0)+val;
     }
     if (Object.keys(comps).length===0&&net===0) continue;
+    const posSalary=comps["岗位工资"]||0;
+    let deductions=0;
+    for (const dc of WH_DEDUCTION_COMPONENTS) {
+      const idx=auto["comp_"+dc]; if (idx==null) continue;
+      const v=r[idx]; if (v==null||v==="") continue;
+      const val=parseFloat(v); if (isNaN(val)) continue;
+      deductions+=val;
+    }
+    if (posSalary>0||deductions>0) comps["岗位工资2"]=Math.max(posSalary-deductions,0);
     if (net===0) net=Object.values(comps).reduce((a,b)=>a+b,0);
     employees.push({
       project_name:pn, project_code:gv("project_code"), rd_name:rd,
